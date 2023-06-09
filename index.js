@@ -33,17 +33,32 @@ async function run() {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
         const classesCollection = client.db("yoganeDb").collection("classes");
+        const usersCollection = client.db("yoganeDb").collection("users");
 
         // create jwt token
         app.post('/jwt', (req, res) => {
             const user = req.body;
-            const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' })
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: '10d' })
 
             res.send({ token })
         })
 
         app.get('/classes', async (req, res) => {
             const result = await classesCollection.find().toArray();
+            res.send(result);
+        })
+
+        // users all api
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            const query = { email: user.email }
+            const exitUser = await usersCollection.findOne(query);
+
+            if (exitUser) {
+                return res.send({ message: 'user already exists' })
+            }
+
+            const result = await usersCollection.insertOne(user);
             res.send(result);
         })
 
