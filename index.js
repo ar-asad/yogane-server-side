@@ -32,8 +32,9 @@ async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
         await client.connect();
-        const classesCollection = client.db("yoganeDb").collection("classes");
         const usersCollection = client.db("yoganeDb").collection("users");
+        const classesCollection = client.db("yoganeDb").collection("classes");
+        const selectClassCollection = client.db("yoganeDb").collection("selectClass");
 
         // create jwt token
         app.post('/jwt', (req, res) => {
@@ -59,6 +60,12 @@ async function run() {
             }
 
             const result = await usersCollection.insertOne(user);
+            res.send(result);
+        })
+
+        app.post('/selectclass', async (req, res) => {
+            const selectClass = req.body;
+            const result = await selectClassCollection.insertOne(selectClass);
             res.send(result);
         })
 
