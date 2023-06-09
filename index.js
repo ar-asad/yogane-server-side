@@ -3,6 +3,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const app = express();
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 const port = process.env.PORT || 5000;
 
 //Please add .env file in .gitignore
@@ -16,7 +17,7 @@ app.use(express.json());
 
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASSWORD}@cluster0.mjpzktk.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -34,6 +35,7 @@ async function run() {
         await client.connect();
         const usersCollection = client.db("yoganeDb").collection("users");
         const classesCollection = client.db("yoganeDb").collection("classes");
+        const paymentCollection = client.db("yoganeDb").collection("payment");
         const selectClassCollection = client.db("yoganeDb").collection("selectClass");
 
         // create jwt token
@@ -63,9 +65,73 @@ async function run() {
             res.send(result);
         })
 
+        // user selectclass api
+        app.get('/selectclass', async (req, res) => {
+            const email = req.query.email;
+            if (!email) {
+                res.send([]);
+            }
+
+            // const decodedEmail = req.decoded.email;
+            // if (email !== decodedEmail) {
+            //   return res.status(403).send({ error: true, message: 'forbidden access' })
+            // }
+
+            const query = { email: email };
+            const result = await selectClassCollection.find(query).toArray();
+            res.send(result);
+        });
+
+        app.get('/selectclass/:id', async (req, res) => {
+            const id = req.params.id;
+            console.log(id)
+            const query = { _id: ObjectId(id) }
+            const booking = await selectClassCollection.findOne(query);
+            res.send(booking)
+        })
+
         app.post('/selectclass', async (req, res) => {
             const selectClass = req.body;
             const result = await selectClassCollection.insertOne(selectClass);
+            res.send(result);
+        })
+
+        app.post("/create-payment-intent", async (req, res) => {
+            const { price } = req.body;
+            const amount = price * 100;
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                currency: 'usd',
+                amount: amount,
+                "payment_method_types": [
+                    "card"
+                ],
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        })
+
+        app.post('/payment', async (req, res) => {
+            const payment = req.body;
+            console.log(payment)
+            const result = await paymentCollection.insertOne(payment);
+            const id = payment.paymentId
+            const filter = { _id: ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    paid: true,
+                    transactionId: payment.transactionId
+                }
+            }
+            const updatedResult = await selectClassCollection.updateOne(filter, updatedDoc);
+            res.send(result);
+        })
+
+        app.delete('/selectclass/:id', async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await selectClassCollection.deleteOne(query);
             res.send(result);
         })
 
