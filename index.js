@@ -47,14 +47,39 @@ async function run() {
         })
 
         app.get('/classes', async (req, res) => {
+            const email = req.query.email;
+            console.log(email)
+            if (email) {
+                const query = {
+                    instructorEmail: email
+                };
+                const result = await classesCollection.find(query).toArray();
+                res.send(result);
+            }
             const result = await classesCollection.find().toArray();
             res.send(result);
         })
+        app.post('/classes', async (req, res) => {
+            const classes = req.body;
+            console.log(classes)
+            const result = await classesCollection.insertOne(classes);
+            res.send(result);
+        })
+
+        // app.get('/selectclass', async (req, res) => {
+        //     const email = req.query.email;
+        //     if (!email) {
+        //         res.send([]);
+        //     }
+
+        //     const query = { email: email };
+        //     const result = await selectClassCollection.find(query).toArray();
+        //     res.send(result);
+        // });
 
         // users all api
         app.get('/users', async (req, res) => {
             const result = await usersCollection.find().toArray();
-            console.log(result)
             res.send(result);
         })
         app.post('/users', async (req, res) => {
@@ -83,19 +108,6 @@ async function run() {
             const result = { admin: user?.role === 'admin' }
             res.send(result);
         })
-        app.get('/users/admin/:email', async (req, res) => {
-            const email = req.params.email;
-
-            // if (req.decoded.email !== email) {
-            //     res.send({ admin: false })
-            // }
-
-            const query = { email: email }
-            const user = await usersCollection.findOne(query);
-            // const result = { admin: user?.role}
-            const result = { admin: user?.role === 'admin' }
-            res.send(result);
-        })
         app.get('/users/instructor/:email', async (req, res) => {
             const email = req.params.email;
 
@@ -105,6 +117,36 @@ async function run() {
             const result = { instructor: user?.role === 'instructor' }
             res.send(result);
         })
+
+        // user make admin api
+        app.put('/users/admin/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const options = { upsert: true };
+            const updatedDoc = {
+                $set: {
+                    role: 'admin'
+                }
+            }
+            const result = await usersCollection.updateOne(filter, updatedDoc, options)
+            res.send(result);
+
+        });
+
+        // user make instructor api
+        app.put('/users/instructor/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const options = { upsert: true };
+            const updatedDoc = {
+                $set: {
+                    role: 'instructor'
+                }
+            }
+            const result = await usersCollection.updateOne(filter, updatedDoc, options)
+            res.send(result);
+
+        });
 
         // user selectclass api
         app.get('/selectclass', async (req, res) => {
@@ -126,7 +168,7 @@ async function run() {
         app.get('/selectclass/:id', async (req, res) => {
             const id = req.params.id;
             console.log(id)
-            const query = { _id: ObjectId(id) }
+            const query = { _id: new ObjectId(id) }
             const booking = await selectClassCollection.findOne(query);
             res.send(booking)
         })
@@ -159,29 +201,33 @@ async function run() {
             if (!email) {
                 res.send([]);
             }
-            // const decodedEmail = req.decoded.email;
-            // if (email !== decodedEmail) {
-            //   return res.status(403).send({ error: true, message: 'forbidden access' })
-            // }
-
             const query = { email: email };
-            console.log(query)
-            const result = await paymentCollection.find(query).toArray();
-            console.log(result)
+            const result = await paymentCollection.find(query).sort({ date: -1 }).toArray();
             res.send(result);
 
         })
 
         app.post('/payment', async (req, res) => {
             const payment = req.body;
-            console.log(payment)
             const result = await paymentCollection.insertOne(payment);
             const id = payment.paymentId
-            const filter = { _id: ObjectId(id) }
+            const filter = { _id: new ObjectId(id) }
+            // find the class to decrease available seat and increase enroll student
+            const classes = await classesCollection.findOne(filter).toArray();
+            console.log(classes)
+            // const options = { upsert: true }
+            // const update = {
+            //     $set: {
+            //         studentNumber: studentNumber + 1,
+            //         availableSeats: availableSeats - 1
+            //     }
+            // }
+
             const updatedDoc = {
                 $set: {
                     paid: true,
-                    transactionId: payment.transactionId
+                    transactionId: payment.transactionId,
+                    instructorName: payment.instructorName
                 }
             }
             const updatedResult = await selectClassCollection.updateOne(filter, updatedDoc);
