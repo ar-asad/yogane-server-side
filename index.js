@@ -52,6 +52,11 @@ async function run() {
         })
 
         // users all api
+        app.get('/users', async (req, res) => {
+            const result = await usersCollection.find().toArray();
+            console.log(result)
+            res.send(result);
+        })
         app.post('/users', async (req, res) => {
             const user = req.body;
             const query = { email: user.email }
@@ -62,6 +67,42 @@ async function run() {
             }
 
             const result = await usersCollection.insertOne(user);
+            res.send(result);
+        });
+
+        app.get('/users/admin/:email', async (req, res) => {
+            const email = req.params.email;
+
+            // if (req.decoded.email !== email) {
+            //     res.send({ admin: false })
+            // }
+
+            const query = { email: email }
+            const user = await usersCollection.findOne(query);
+            // const result = { admin: user?.role}
+            const result = { admin: user?.role === 'admin' }
+            res.send(result);
+        })
+        app.get('/users/admin/:email', async (req, res) => {
+            const email = req.params.email;
+
+            // if (req.decoded.email !== email) {
+            //     res.send({ admin: false })
+            // }
+
+            const query = { email: email }
+            const user = await usersCollection.findOne(query);
+            // const result = { admin: user?.role}
+            const result = { admin: user?.role === 'admin' }
+            res.send(result);
+        })
+        app.get('/users/instructor/:email', async (req, res) => {
+            const email = req.params.email;
+
+            const query = { email: email }
+            const user = await usersCollection.findOne(query);
+            // const result = { instructor: user?.role}
+            const result = { instructor: user?.role === 'instructor' }
             res.send(result);
         })
 
@@ -110,6 +151,25 @@ async function run() {
             res.send({
                 clientSecret: paymentIntent.client_secret,
             });
+        })
+
+        app.get('/payment', async (req, res) => {
+            const email = req.query.email;
+            console.log(email)
+            if (!email) {
+                res.send([]);
+            }
+            // const decodedEmail = req.decoded.email;
+            // if (email !== decodedEmail) {
+            //   return res.status(403).send({ error: true, message: 'forbidden access' })
+            // }
+
+            const query = { email: email };
+            console.log(query)
+            const result = await paymentCollection.find(query).toArray();
+            console.log(result)
+            res.send(result);
+
         })
 
         app.post('/payment', async (req, res) => {
