@@ -133,6 +133,21 @@ async function run() {
 
         });
 
+        // class status change api by admin
+        app.put('/users/approve/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) }
+            const options = { upsert: true };
+            const updatedDoc = {
+                $set: {
+                    status: 'aproved'
+                }
+            }
+            const result = await classesCollection.updateOne(filter, updatedDoc, options)
+            res.send(result);
+
+        });
+
         // user make instructor api
         app.put('/users/instructor/:id', async (req, res) => {
             const id = req.params.id;
