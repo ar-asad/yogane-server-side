@@ -22,7 +22,7 @@ const verifyJWT = (req, res, next) => {
     // bearer token
     const token = authorization.split(' ')[1];
 
-    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
         if (err) {
             return res.status(401).send({ error: true, message: 'unauthorized access' })
         }
@@ -85,7 +85,6 @@ async function run() {
 
         app.get('/classes', async (req, res) => {
             const email = req.query.email;
-            console.log(email)
             if (email) {
                 const query = {
                     instructorEmail: email
@@ -93,30 +92,21 @@ async function run() {
                 const result = await classesCollection.find(query).toArray();
                 res.send(result);
             }
-            const result = await classesCollection.find().toArray();
-            res.send(result);
+            else {
+                const result = await classesCollection.find().toArray();
+                res.send(result);
+            }
         })
-        app.post('/classes', async (req, res) => {
+        app.post('/classes', verifyJWT, verifyInstructor, async (req, res) => {
             const classes = req.body;
-            console.log(classes)
             const result = await classesCollection.insertOne(classes);
             res.send(result);
         })
 
-        // app.get('/selectclass', async (req, res) => {
-        //     const email = req.query.email;
-        //     if (!email) {
-        //         res.send([]);
-        //     }
-
-        //     const query = { email: email };
-        //     const result = await selectClassCollection.find(query).toArray();
-        //     res.send(result);
-        // });
-
         // users all api
-        app.get('/users', async (req, res) => {
+        app.get('/users', verifyJWT, verifyAdmin, async (req, res) => {
             const result = await usersCollection.find().toArray();
+            console.log(result)
             res.send(result);
         })
         app.post('/users', async (req, res) => {
@@ -132,30 +122,28 @@ async function run() {
             res.send(result);
         });
 
-        app.get('/users/admin/:email', async (req, res) => {
+        // check admin
+        app.get('/users/admin/:email', verifyJWT, async (req, res) => {
             const email = req.params.email;
-
-            // if (req.decoded.email !== email) {
-            //     res.send({ admin: false })
-            // }
-
             const query = { email: email }
             const user = await usersCollection.findOne(query);
             // const result = { admin: user?.role}
             const result = { admin: user?.role === 'admin' }
             res.send(result);
         })
-        app.get('/users/instructor/:email', async (req, res) => {
-            const email = req.params.email;
 
+        // check instructor
+        app.get('/users/instructor/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
             const query = { email: email }
             const user = await usersCollection.findOne(query);
             // const result = { instructor: user?.role}
             const result = { instructor: user?.role === 'instructor' }
+
             res.send(result);
         })
 
-        // user make admin api
+        // admins api
         app.put('/users/admin/:id', async (req, res) => {
             const id = req.params.id;
             const filter = { _id: new ObjectId(id) }
@@ -203,8 +191,7 @@ async function run() {
         app.put('/feedback/:id', async (req, res) => {
             const id = req.params.id;
             console.log(id)
-            const feedbackInfo = req.body;
-            console.log(feedbackInfo)
+            const feedbackInfo = req.body.value;
             const filter = { _id: new ObjectId(id) }
             const options = { upsert: true };
             const updatedDoc = {
@@ -233,16 +220,11 @@ async function run() {
         });
 
         // user selectclass api
-        app.get('/selectclass', async (req, res) => {
+        app.get('/selectclass', verifyJWT, async (req, res) => {
             const email = req.query.email;
             if (!email) {
                 res.send([]);
             }
-
-            // const decodedEmail = req.decoded.email;
-            // if (email !== decodedEmail) {
-            //   return res.status(403).send({ error: true, message: 'forbidden access' })
-            // }
 
             const query = { email: email };
             const result = await selectClassCollection.find(query).toArray();
@@ -251,7 +233,6 @@ async function run() {
 
         app.get('/selectclass/:id', async (req, res) => {
             const id = req.params.id;
-            console.log(id)
             const query = { _id: new ObjectId(id) }
             const booking = await selectClassCollection.findOne(query);
             res.send(booking)
@@ -279,9 +260,8 @@ async function run() {
             });
         })
 
-        app.get('/payment', async (req, res) => {
+        app.get('/payment', verifyJWT, async (req, res) => {
             const email = req.query.email;
-            console.log(email)
             if (!email) {
                 res.send([]);
             }
@@ -293,20 +273,26 @@ async function run() {
 
         app.post('/payment', async (req, res) => {
             const payment = req.body;
-            const result = await paymentCollection.insertOne(payment);
-            const id = payment.paymentId
-            const filter = { _id: new ObjectId(id) }
-            // find the class to decrease available seat and increase enroll student
-            const classes = await classesCollection.findOne(filter).toArray();
-            console.log(classes)
-            // const options = { upsert: true }
-            // const update = {
-            //     $set: {
-            //         studentNumber: studentNumber + 1,
-            //         availableSeats: availableSeats - 1
-            //     }
-            // }
+            const classId = payment.paymentId;
+            const selectedId = payment.selectedId;
+            const classIdFilter = { _id: new ObjectId(classId) }
+            const selectedIdFilter = { _id: new ObjectId(selectedId) }
 
+            // store payment data in payment collection
+            const result = await paymentCollection.insertOne(payment);
+
+            // find the class from classCollection to decrease available seats and increase enroll student
+            const classes = await classesCollection.findOne(classIdFilter);
+            const options = { upsert: true }
+            const update = {
+                $set: {
+                    studentNumber: classes.studentNumber + 1,
+                    availableSeats: classes.availableSeats - 1
+                }
+            }
+            const updateResult = await classesCollection.updateOne(classIdFilter, update, options);
+
+            // selectedClasses updated after fulfilPayment
             const updatedDoc = {
                 $set: {
                     paid: true,
@@ -314,7 +300,7 @@ async function run() {
                     instructorName: payment.instructorName
                 }
             }
-            const updatedResult = await selectClassCollection.updateOne(filter, updatedDoc);
+            const updatedResult = await selectClassCollection.updateOne(selectedIdFilter, updatedDoc);
             res.send(result);
         })
 
